@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>2027年5月 東京・鎌倉・箱根・伊豆・富士五湖 自駕遊及油站指南</title>
+  <!-- Leaflet CSS (OpenStreetMap 免 API Key) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --card: #334155;
+      --border: #475569;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --eneos: #f97316;
+      --danger: #ef4444;
+      --success: #22c55e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang HK", "Microsoft JhengHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    header {
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 20px;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .title-group h1 { font-size: 1.25rem; font-weight: 700; color: #fff; }
+    .title-group p { font-size: 0.82rem; color: var(--muted); }
+    .badge-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .badge {
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      font-weight: 600;
+    }
+    .badge.eneos {
+      background: rgba(249, 115, 22, 0.15);
+      color: #fb923c;
+      border-color: rgba(249, 115, 22, 0.35);
+    }
+
+    /* 主版面配置 */
+    .layout {
+      display: grid;
+      grid-template-columns: 430px 1fr;
+      height: calc(100vh - 68px);
+      min-height: 640px;
+    }
+    @media (max-width: 960px) {
+      .layout {
+        grid-template-columns: 1fr;
+        height: auto;
+      }
+      .map-pane { height: 460px; order: -1; }
+    }
+
+    /* 左側行程與油站控制欄 */
+    .sidebar {
+      background: var(--panel);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .day-tabs {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      padding: 10px 12px;
+      background: #0f172a;
+      border-bottom: 1px solid var(--border);
+    }
+    .day-btn {
+      background: var(--panel);
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 4px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+    .day-btn:hover { color: #fff; border-color: var(--accent); }
+    .day-btn.active {
+      background: var(--accent);
+      color: #0f172a;
+      border-color: var(--accent);
+    }
+    .day-btn.gas-tab.active {
+      background: var(--eneos);
+      color: #fff;
+      border-color: var(--eneos);
+    }
+
+    .list-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* 景點與油站卡片 */
+    .item-card {
+      background: rgba(51, 65, 85, 0.55);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .item-card:hover {
+      border-color: var(--accent);
+      background: rgba(51, 65, 85, 0.9);
+    }
+    .item-card.gas-card {
+      border-left: 4px solid var(--eneos);
+    }
+    .item-card.spot-card {
+      border-left: 4px solid var(--accent);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .card-title { font-weight: 700; font-size: 0.95rem; color: #fff; }
+    .card-tag {
+      font-size: 0.7rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .tag-day { background: #334155; color: #bae6fd; }
+    .tag-24h { background: rgba(34, 197, 94, 0.2); color: #4ade80; border: 1px solid rgba(34,197,94,0.4); }
+    .tag-warn { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239,68,68,0.4); }
+    .card-desc { font-size: 0.8rem; color: #cbd5e1; margin-bottom: 8px; }
+    .card-meta {
+      font-size: 0.75rem;
+      color: var(--muted);
+      background: rgba(15, 23, 42, 0.6);
+      padding: 6px 8px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .action-btn {
+      font-size: 0.74rem;
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #0f172a;
+      color: #e2e8f0;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-weight: 600;
+    }
+    .action-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .action-btn.primary {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+    }
+
+    /* 入油指南與計算機盒 */
+    .fuel-box {
+      background: #0f172a;
+      border-top: 1px solid var(--border);
+      padding: 10px 12px;
+      font-size: 0.78rem;
+    }
+    .nozzle-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .nozzle {
+      padding: 5px 6px;
+      border-radius: 6px;
+      text-align: center;
+      font-weight: 700;
+      font-size: 0.72rem;
+    }
+    .nozzle.red { background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #fca5a5; }
+    .nozzle.yellow { background: rgba(234, 179, 8, 0.15); border: 1px solid #eab308; color: #fde047; }
+    .nozzle.green { background: rgba(34, 197, 94, 0.15); border: 1px solid #22c55e; color: #86efac; }
+
+    /* 右側地圖區 */
+    .map-pane {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      background: #0b1120;
+      overflow: hidden;
+    }
+    .map-toolbar {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      z-index: 1000;
+      display: flex;
+      gap: 6px;
+      background: rgba(15, 23, 42, 0.9);
+      padding: 6px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .mode-btn {
+      padding: 6px 12px;
+      border-radius: 6px;
+      border: none;
+      background: transparent;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .mode-btn.active {
+      background: var(--accent);
+      color: #0f172a;
+    }
+
+    #osm-map {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+    }
+    #svg-map {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 5;
+      background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
+    }
+    #svg-map.visible {
+      z-index: 20;
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* 自訂油站與景點地圖標記 */
+    .custom-pin {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      font-weight: 800;
+      font-size: 12px;
+      color: #fff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.6);
+      border: 2px solid #fff;
+    }
+    .pin-spot { background: #0284c7; }
+    .pin-gas { background: #ea580c; border-radius: 6px; }
+
+    /* Toast 提示 */
+    #toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #22c55e;
+      color: #052e16;
+      font-weight: 700;
+      padding: 10px 16px;
+      border-radius: 8px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      z-index: 9999;
+      display: none;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="title-group">
+      <h1>🗾 2027年5月 東京・鎌倉・箱根・伊豆・富士五湖 自駕遊及油站指南</h1>
+      <p>2027年5月26日 (三) – 5月31日 (一) ｜ 14個行程點 + 7間沿途 ENEOS 油站車機導航電話</p>
+    </div>
+    <div class="badge-row">
+      <span class="badge">🚗 5月27–29日 自駕路段 (~430 km)</span>
+      <span class="badge eneos">⛽ 紅色油槍 Regular (レギュラー)</span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <!-- 左側清單 -->
+    <aside class="sidebar">
+      <div class="day-tabs" id="dayTabs">
+        <button class="day-btn active" onclick="filterItems('ALL', this)">全部行程</button>
+        <button class="day-btn gas-tab" onclick="filterItems('GAS', this)">⛽ 搵油站(7)</button>
+        <button class="day-btn" onclick="filterItems('26', this)">5/26 抵日</button>
+        <button class="day-btn" onclick="filterItems('27', this)">5/27 鎌倉箱根</button>
+        <button class="day-btn" onclick="filterItems('28', this)">5/28 伊豆富士</button>
+        <button class="day-btn" onclick="filterItems('29', this)">5/29 河口湖還車</button>
+        <button class="day-btn" onclick="filterItems('30', this)">5/30 東京</button>
+        <button class="day-btn" onclick="filterItems('31', this)">5/31 回程</button>
+      </div>
+
+      <div class="list-container" id="cardList"></div>
+
+      <div class="fuel-box">
+        <div><strong>🇯🇵 日本自助入油鐵則：</strong>還車前記得入滿並保留收據（領収書）</div>
+        <div class="nozzle-row">
+          <div class="nozzle red">🔴 紅槍 Regular<br>一般汽油 (99%租車)</div>
+          <div class="nozzle yellow">🟡 黃槍 High-Octane<br>高辛烷值跑車</div>
+          <div class="nozzle green">🟢 綠槍 Light Oil<br>軽油 = 柴油 (勿入!)</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- 右側雙模式地圖 -->
+    <main class="map-pane">
+      <div class="map-toolbar">
+        <button class="mode-btn active" id="btnOsm" onclick="switchMapMode('osm')">🗺️ OSM 標準互動地圖</button>
+        <button class="mode-btn" id="btnSvg" onclick="switchMapMode('svg')">📐 路線拓撲圖 (離線可用)</button>
+        <button class="mode-btn" onclick="fitAllMarkers()">🎯 重置視角</button>
+      </div>
+
+      <!-- 1. OpenStreetMap 容器 (常駐 DOM 防止切換 Crash) -->
+      <div id="osm-map"></div>
+
+      <!-- 2. SVG 路線拓撲圖容器 (常駐 DOM) -->
+      <div id="svg-map">
+        <svg viewBox="0 0 800 520" style="width:100%; height:100%; max-width:820px;">
+          <defs>
+            <linearGradient id="routeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#38bdf8" />
+              <stop offset="50%" stop-color="#f97316" />
+              <stop offset="100%" stop-color="#22c55e" />
+            </linearGradient>
+          </defs>
+          <!-- 背景格線 -->
+          <rect width="800" height="520" rx="16" fill="#0f172a" stroke="#334155" stroke-width="2"/>
+          <text x="28" y="38" fill="#94a3b8" font-size="14" font-weight="bold">2027年5月 東京 ➔ 鎌倉 ➔ 箱根 ➔ 伊豆 ➔ 富士五湖 環狀自駕拓撲圖</text>
+
+          <!-- 路線連線 -->
+          <!-- Day 27: 東京 -> 鎌倉 -> 江之島 -> 箱根 -> 伊東 -->
+          <path d="M 590 130 L 520 260 L 485 275 L 350 265 L 365 390" fill="none" stroke="#38bdf8" stroke-width="4" stroke-dasharray="8 4"/>
+          <!-- Day 28: 伊東 -> 大室山/城崎海岸 -> 御殿場 -> 山中湖 -> 河口湖 -->
+          <path d="M 365 390 L 385 445 L 310 225 L 270 185 L 220 155" fill="none" stroke="#f97316" stroke-width="4"/>
+          <!-- Day 29: 河口湖 -> 天梯小鎮/忍野八海 -> 東京 -->
+          <path d="M 220 155 L 250 140 L 590 130" fill="none" stroke="#22c55e" stroke-width="4"/>
+
+          <!-- 主要節點 -->
+          <g style="cursor:pointer" onclick="selectById('d26-tokyo')">
+            <circle cx="590" cy="130" r="14" fill="#0284c7" stroke="#fff" stroke-width="3"/>
+            <text x="612" y="135" fill="#fff" font-size="14" font-weight="bold">東京 (5/26, 30, 31) + ⛽西新宿/白金還車</text>
+          </g>
+          <g style="cursor:pointer" onclick="selectById('d27-kamakura')">
+            <circle cx="520" cy="260" r="10" fill="#0284c7" stroke="#fff" stroke-width="2"/>
+            <text x="536" y="264" fill="#bae6fd" font-size="13">鎌倉高校前 (5/27)</text>
+          </g>
+          <g style="cursor:pointer" onclick="selectById('gas-enoshima')">
+            <rect x="473" y="263" width="22" height="22" rx="4" fill="#ea580c" stroke="#fff" stroke-width="2"/>
+            <text x="435" y="305" fill="#fdba74" font-size="12" font-weight="bold">江之島 + ⛽江ノ島SS</text>
+          </g>
+          <g style="cursor:pointer" onclick="selectById('d27-hakone')">
+            <circle cx="350" cy="265" r="11" fill="#0284c7" stroke="#fff" stroke-width="2"/>
+            <text x="255" y="268" fill="#bae6fd" font-size="13">箱根神社 (⛽元箱根18:00關)</text>
+          </g>
+          <g style="cursor:pointer" onclick="selectById('gas-ito')">
+            <rect x="353" y="378" width="24" height="24" rx="5" fill="#ea580c" stroke="#fff" stroke-width="2"/>
+            <text x="388" y="395" fill="#fb923c" font-size="13" font-weight="bold">伊豆伊東 + ⛽伊東135 SS (24H必入!)</text>
+          </g>
+          <g style="cursor:pointer" onclick="selectById('d28-omuroyama')">
+            <circle cx="385" cy="445" r="11" fill="#0284c7" stroke="#fff" stroke-width="2"/>
+            <text x="405" y="450" fill="#bae6fd" font-size="13">大室山・仙人掌動物園・城崎海岸 (5/28)</text>
+          </g>
+          <g style="cursor:pointer" onclick="selectById('gas-gotemba')">
+            <rect x="298" y="213" width="22" height="22" rx="4" fill="#ea580c" stroke="#fff" stroke-width="2"/>
+            <text x="328" y="228" fill="#fdba74" font-size="12">⛽御殿場インター東SS (24H)</text>
+          </g>
+          <g style="cursor:pointer" onclick="selectById('d28-yamanakako')">
+            <circle cx="270" cy="185" r="9" fill="#0284c7" stroke="#fff" stroke-width="2"/>
+            <text x="286" y="189" fill="#bae6fd" font-size="12">山中湖</text>
+          </g>
+          <g style="cursor:pointer" onclick="selectById('gas-kawaguchiko')">
+            <rect x="208" y="143" width="24" height="24" rx="5" fill="#ea580c" stroke="#fff" stroke-width="2"/>
+            <text x="65" y="160" fill="#fb923c" font-size="13" font-weight="bold">河口湖・羅森・天梯小鎮 + ⛽河口湖SS</text>
+          </g>
+          <g style="cursor:pointer" onclick="selectById('d29-oshino')">
+            <circle cx="250" cy="140" r="9" fill="#0284c7" stroke="#fff" stroke-width="2"/>
+            <text x="240" y="122" fill="#86efac" font-size="12">忍野八海 (5/29)</text>
+          </g>
+
+          <!-- 圖例 -->
+          <rect x="25" y="465" width="750" height="36" rx="8" fill="#1e293b"/>
+          <text x="40" y="488" fill="#38bdf8" font-size="12" font-weight="bold">--- 5/27 東京➔鎌倉➔箱根➔伊豆</text>
+          <text x="275" y="488" fill="#f97316" font-size="12" font-weight="bold">━━ 5/28 伊豆➔山中湖➔河口湖</text>
+          <text x="505" y="488" fill="#22c55e" font-size="12" font-weight="bold">━━ 5/29 河口湖➔忍野八海➔東京還車</text>
+        </svg>
+      </div>
+    </main>
+  </div>
+
+  <div id="toast">已複製車機電話！</div>
+
+  <!-- Leaflet JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script>
+    // 完整行程與 7 間精選 ENEOS 油站資料
+    const ITEMS = [
+      // 5月26日
+      {
+        id: "d26-airport",
+        day: "26",
+        type: "spot",
+        name: "1. 東京機場 (羽田 HND / 成田 NRT)",
+        time: "5月26日 (三) 抵達",
+        lat: 35.5494,
+        lng: 139.7798,
+        tel: "03-5757-8111",
+        hours: "24小時",
+        desc: "抵達東京機場，辦理入境手續後乘搭鐵路或巴士前往東京市區酒店 Check-in。"
+      },
+      {
+        id: "d26-tokyo",
+        day: "26",
+        type: "spot",
+        name: "2. 東京市區 (住宿及取車準備)",
+        time: "5月26日 (三) 晚上",
+        lat: 35.6895,
+        lng: 139.6917,
+        tel: "03-3344-0111",
+        hours: "全天候",
+        desc: "東京市區休整。準備翌日（5月27日）早上取車出發前往鎌倉、江之島及箱根。"
+      },
+
+      // 5月27日
+      {
+        id: "d27-kamakura",
+        day: "27",
+        type: "spot",
+        name: "3. 鎌倉高校前 (平交道)",
+        time: "5月27日 (四) 上午",
+        lat: 35.3067,
+        lng: 139.5005,
+        tel: "0466-24-2715",
+        hours: "全天候開放 (建議09:30前抵達)",
+        desc: "《男兒當入樽》經典海岸平交道。附近無大型停車場，建議泊喺七里濱或江之島再步行/搭江之電1站。"
+      },
+      {
+        id: "d27-enoshima",
+        day: "27",
+        type: "spot",
+        name: "4. 江之島 (弁財天仲見世通・江島神社)",
+        time: "5月27日 (四) 中午",
+        lat: 35.2998,
+        lng: 139.4803,
+        tel: "0466-22-4111",
+        hours: "08:30 - 17:00",
+        desc: "車可直接駛過江之島大橋泊入島上「江ノ島なぎさ駐車場」，品嚐吻仔魚丼。"
+      },
+      {
+        id: "gas-enoshima",
+        day: "27",
+        type: "gas",
+        name: "⛽ ENEOS 134號江ノ島 SS (湘南海岸油站)",
+        time: "5月27日 途經補給",
+        lat: 35.3089,
+        lng: 139.4882,
+        tel: "0466-22-3750",
+        hours: "07:00 - 22:00",
+        is24h: false,
+        desc: "位於國道134號江之島入口旁，上西湘バイパス及箱根山路前最順路嘅油站。"
+      },
+      {
+        id: "d27-hakone",
+        day: "27",
+        type: "spot",
+        name: "5. 箱根神社 (蘆之湖水中和平鳥居)",
+        time: "5月27日 (四) 下午",
+        lat: 35.2048,
+        lng: 139.0253,
+        tel: "0460-83-7123",
+        hours: "08:15 - 17:00",
+        desc: "蘆之湖畔千年古社與紅色水中鳥居，設有免費神社專用停車場。"
+      },
+      {
+        id: "gas-hakone",
+        day: "27",
+        type: "gas",
+        name: "⛽ ENEOS 元箱根 SS (⚠️星期四注意營業時間)",
+        time: "5月27日 箱根山上備用",
+        lat: 35.2022,
+        lng: 139.0315,
+        tel: "0460-83-6412",
+        hours: "08:00 - 18:00 (⚠️逢週四或定休/早關)",
+        warn: true,
+        desc: "2027年5月27日係星期四！箱根山上油站極少且18:00前關門，強烈建議落山去伊東國道135號24小時油站入油。"
+      },
+      {
+        id: "gas-ito",
+        day: "27",
+        type: "gas",
+        name: "⛽ ENEOS EneJet セルフ伊東ルート135 SS (★強烈推薦)",
+        time: "5月27日 傍晚抵達伊豆必入",
+        lat: 34.9765,
+        lng: 139.0968,
+        tel: "0557-37-5165",
+        hours: "24小時營業 (自助 EneJet)",
+        is24h: true,
+        desc: "由箱根經伊豆スカイライン落山進入伊東市國道135號必經！24小時自助，油價比箱根山區平。"
+      },
+      {
+        id: "d27-izu",
+        day: "27",
+        type: "spot",
+        name: "6. 伊豆溫泉住宿區 (伊東 / 伊豆高原)",
+        time: "5月27日 (四) 晚上住宿",
+        lat: 34.9658,
+        lng: 139.1042,
+        tel: "0557-37-6105",
+        hours: "住宿 Check-in",
+        desc: "入住伊東或伊豆高原溫泉旅館，方便翌日早上15分鐘車程直達大室山。"
+      },
+
+      // 5月28日
+      {
+        id: "d28-omuroyama",
+        day: "28",
+        type: "spot",
+        name: "7. 大室山 (登山吊椅 & 火山口鉢巡步道)",
+        time: "5月28日 (五) 09:00",
+        lat: 34.9061,
+        lng: 139.0969,
+        tel: "0557-51-0258",
+        hours: "09:00 - 17:00",
+        desc: "《你的名字》抹茶山原型！搭吊椅上山頂行一圈約45分鐘，天氣好時可遠眺富士山與相模灣。"
+      },
+      {
+        id: "d28-cactus",
+        day: "28",
+        type: "spot",
+        name: "8. 伊豆仙人掌動物園 (伊豆シャボテン動物公園)",
+        time: "5月28日 (五) 10:45",
+        lat: 34.9068,
+        lng: 139.1014,
+        tel: "0557-51-1111",
+        hours: "09:30 - 17:00",
+        desc: "就喺大室山吊椅站正對面（車程1分鐘）！必睇水豚君及仙人掌溫室。"
+      },
+      {
+        id: "d28-jogasaki",
+        day: "28",
+        type: "spot",
+        name: "9. 城崎海岸 / 門脇吊橋",
+        time: "5月28日 (五) 13:30",
+        lat: 34.8902,
+        lng: 139.1396,
+        tel: "0557-37-6105",
+        hours: "全天候開放 (門脇駐車場 09:00-17:00)",
+        desc: "火山熔岩形成嘅壯觀懸崖海岸與48米長跨海門脇吊橋，泊車後行5分鐘即達。"
+      },
+      {
+        id: "gas-kawana",
+        day: "28",
+        type: "gas",
+        name: "⛽ ENEOS セルフ川奈 SS (離開伊豆北上補給)",
+        time: "5月28日 下午北上富士五湖前",
+        lat: 34.9412,
+        lng: 139.1245,
+        tel: "0557-45-8166",
+        hours: "07:00 - 21:00",
+        is24h: false,
+        desc: "由城崎海岸北上返山中湖之前，喺國道135號川奈附近先入滿油再上山路最安心。"
+      },
+      {
+        id: "gas-gotemba",
+        day: "28",
+        type: "gas",
+        name: "⛽ ENEOS EneJet 御殿場インター東 SS (24H中轉站)",
+        time: "5月28日 經御殿場往山中湖",
+        lat: 35.2951,
+        lng: 138.9432,
+        tel: "0550-82-3566",
+        hours: "24小時營業",
+        is24h: true,
+        desc: "由伊豆北上經箱根/御殿場進入山中湖嘅大型24小時自助油站。"
+      },
+      {
+        id: "d28-yamanakako",
+        day: "28",
+        type: "spot",
+        name: "10. 山中湖 (長池親水公園 / 白鳥濱)",
+        time: "5月28日 (五) 16:15",
+        lat: 35.4241,
+        lng: 138.8752,
+        tel: "0555-62-9977",
+        hours: "全天候開放",
+        desc: "距離富士山最近、海拔最高嘅富士五湖，黃昏時分喺長池親水公園影富士山倒影極靚。"
+      },
+      {
+        id: "d28-kawaguchiko",
+        day: "28",
+        type: "spot",
+        name: "11. 河口湖溫泉住宿區",
+        time: "5月28日 (五) 晚上住宿",
+        lat: 35.5111,
+        lng: 138.7658,
+        tel: "0555-72-3168",
+        hours: "住宿 Check-in",
+        desc: "入住河口湖溫泉酒店，準備翌日清晨趁少人去打卡羅森便利店同天梯小鎮。"
+      },
+
+      // 5月29日
+      {
+        id: "d29-lawson",
+        day: "29",
+        type: "spot",
+        name: "12. 羅森便利店 (LAWSON 河口湖站前店)",
+        time: "5月29日 (六) 07:30",
+        lat: 35.4981,
+        lng: 138.7676,
+        tel: "0555-72-5063",
+        hours: "24小時營業",
+        desc: "富士山背景便利店打卡位（注意遵守現場交通指示，車可短暫泊於便利店車位或河口湖站旁收費車場）。"
+      },
+      {
+        id: "gas-kawaguchiko",
+        day: "29",
+        type: "gas",
+        name: "⛽ ENEOS セルフ富士河口湖 SS (河口湖核心油站)",
+        time: "5月29日 河口湖出發補給",
+        lat: 35.4952,
+        lng: 138.7605,
+        tel: "0555-72-1255",
+        hours: "07:00 - 22:00",
+        is24h: false,
+        desc: "位於國道139號河口湖站附近，去天梯小鎮及忍野八海必經。"
+      },
+      {
+        id: "d29-ladder",
+        day: "29",
+        type: "spot",
+        name: "13. 天梯小鎮 (富士吉田・日川時計店)",
+        time: "5月29日 (六) 08:30",
+        lat: 35.4926,
+        lng: 138.8037,
+        tel: "0555-22-1466",
+        hours: "建議09:00前抵達",
+        desc: "復古街道直通巨大富士山景觀。請將車泊喺附近下吉田站旁投幣停車場，切勿違泊喺商店街馬路。"
+      },
+      {
+        id: "d29-oshino",
+        day: "29",
+        type: "spot",
+        name: "14. 忍野八海 (富士山雪水湧泉群)",
+        time: "5月29日 (六) 10:30",
+        lat: 35.4601,
+        lng: 138.8328,
+        tel: "0555-84-4221",
+        hours: "全天候 (店舖 09:00-17:00)",
+        desc: "八個清澈見底嘅富士山融雪湧泉池，必食草餅與燒鱒魚。玩完經中央道/東名高速返東京還車。"
+      },
+      {
+        id: "gas-shinjuku",
+        day: "29",
+        type: "gas",
+        name: "⛽ ENEOS Dr.Drive 西新宿 SS (★東京滿油還車點 1)",
+        time: "5月29日 返抵東京還車前必入",
+        lat: 35.6916,
+        lng: 139.6875,
+        tel: "03-3362-5251",
+        hours: "24小時營業",
+        is24h: true,
+        desc: "由河口湖行中央道返新宿/池袋/澀谷還車最方便嘅24小時油站！入滿紅色油槍後記得攞收據(領収書)。"
+      },
+      {
+        id: "gas-shirokane",
+        day: "29",
+        type: "gas",
+        name: "⛽ ENEOS Dr.Drive セルフ白金 SS (★東京滿油還車點 2)",
+        time: "5月29日 東京站/品川/銀座還車備選",
+        lat: 35.6425,
+        lng: 139.7262,
+        tel: "03-3443-0555",
+        hours: "24小時營業",
+        is24h: true,
+        desc: "如果租車店喺品川、六本木、銀座或東京站一帶，呢間24小時自助油站最順路。"
+      },
+
+      // 5月30 - 31日
+      {
+        id: "d30-tokyo",
+        day: "30",
+        type: "spot",
+        name: "15. 東京市區全日自由行 (Shopping / 美食)",
+        time: "5月30日 (日) 全日",
+        lat: 35.6654,
+        lng: 139.7121,
+        tel: "03-5468-5551",
+        hours: "全日",
+        desc: "已經還車，乘搭東京地鐵輕鬆行表參道、青山、銀座或新宿。"
+      },
+      {
+        id: "d31-tokyo",
+        day: "31",
+        type: "spot",
+        name: "16. 東京市區 ➔ 東京機場回程",
+        time: "5月31日 (一) 回程",
+        lat: 35.6812,
+        lng: 139.7671,
+        tel: "03-3215-1111",
+        hours: "視乎航班時間",
+        desc: "最後衝刺買手信，前往羽田或成田機場搭機回程。"
+      }
+    ];
+
+    let map = null;
+    let markersLayer = null;
+    let routeLine = null;
+    let markerDict = {};
+    let currentFilter = "ALL";
+
+    // 初始化 OpenStreetMap
+    function initMap() {
+      map = L.map("osm-map", {
+        center: [35.32, 139.25],
+        zoom: 9,
+        zoomControl: true
+      });
+
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(map);
+
+      markersLayer = L.layerGroup().addTo(map);
+      renderAll("ALL");
+
+      // 修正 iframe / Google Sites 載入時尺寸計算
+      setTimeout(() => {
+        if (map) map.invalidateSize();
+      }, 350);
+    }
+
+    // 渲染左邊卡片及地圖標記
+    function renderAll(filter) {
+      currentFilter = filter;
+      const listEl = document.getElementById("cardList");
+      listEl.innerHTML = "";
+      markersLayer.clearLayers();
+      markerDict = {};
+
+      const filtered = ITEMS.filter(item => {
+        if (filter === "ALL") return true;
+        if (filter === "GAS") return item.type === "gas";
+        return item.day === filter;
+      });
+
+      const routeCoords = [];
+
+      filtered.forEach((item, idx) => {
+        const isGas = item.type === "gas";
+        if (!isGas || filter === "GAS") {
+          routeCoords.push([item.lat, item.lng]);
+        }
+
+        // 建立地圖 Icon
+        const iconHtml = `<div class="custom-pin ${isGas ? 'pin-gas' : 'pin-spot'}" style="width:28px;height:28px;">${isGas ? '⛽' : (idx + 1)}</div>`;
+        const customIcon = L.divIcon({
+          html: iconHtml,
+          className: "",
+          iconSize: [28, 28],
+          iconAnchor: [14, 14],
+          popupAnchor: [0, -14]
+        });
+
+        const gmapUrl = `https://www.google.com/maps/search/?api=1&query=${item.lat},${item.lng}`;
+        const popupHtml = `
+          <div style="font-family:sans-serif; min-width:210px; color:#0f172a;">
+            <div style="font-weight:700; font-size:14px; margin-bottom:4px;">${item.name}</div>
+            <div style="font-size:12px; color:#475569; margin-bottom:6px;">${item.time} ｜ 🕒 ${item.hours}</div>
+            <div style="font-size:12px; background:#f1f5f9; padding:5px; border-radius:4px; margin-bottom:6px;">
+              <strong>📞 車機電話：</strong>${item.tel}
+            </div>
+            <div style="font-size:12px; margin-bottom:8px;">${item.desc}</div>
+            <a href="${gmapUrl}" target="_blank" rel="noopener" style="display:inline-block; background:#0284c7; color:#fff; text-decoration:none; padding:5px 10px; border-radius:5px; font-size:12px; font-weight:bold;">📍 用 Google Maps 打開</a>
+          </div>
+        `;
+
+        const marker = L.marker([item.lat, item.lng], { icon: customIcon })
+          .bindPopup(popupHtml)
+          .addTo(markersLayer);
+
+        markerDict[item.id] = marker;
+
+        // 建立左側卡片
+        const card = document.createElement("div");
+        card.className = `item-card ${isGas ? "gas-card" : "spot-card"}`;
+        card.id = `card-${item.id}`;
+        card.onclick = () => focusItem(item.id);
+
+        let badgeHtml = `<span class="card-tag tag-day">5月${item.day}日</span>`;
+        if (isGas && item.is24h) badgeHtml = `<span class="card-tag tag-24h">24H 自助營業</span>`;
+        if (isGas && item.warn) badgeHtml = `<span class="card-tag tag-warn">⚠️ 週四注意早關</span>`;
+
+        card.innerHTML = `
+          <div class="card-header">
+            <div class="card-title">${item.name}</div>
+            ${badgeHtml}
+          </div>
+          <div class="card-desc">${item.desc}</div>
+          <div class="card-meta">
+            🕒 營業/時間：${item.hours}<br>
+            📞 車機電話 (Car Navi)：<strong>${item.tel}</strong>
+          </div>
+          <div class="card-actions" onclick="event.stopPropagation()">
+            <button class="action-btn primary" onclick="copyTel('${item.tel}')">📋 複製車機電話</button>
+            <a class="action-btn" href="${gmapUrl}" target="_blank" rel="noopener">🗺️ Google Maps 導航</a>
+          </div>
+        `;
+        listEl.appendChild(card);
+      });
+
+      // 畫路線折線
+      if (routeLine) {
+        map.removeLayer(routeLine);
+      }
+      if (routeCoords.length > 1) {
+        routeLine = L.polyline(routeCoords, {
+          color: filter === "GAS" ? "#f97316" : "#38bdf8",
+          weight: 4,
+          opacity: 0.85,
+          dashArray: "8, 6"
+        }).addTo(markersLayer);
+      }
+
+      fitAllMarkers();
+    }
+
+    function filterItems(filter, btnEl) {
+      document.querySelectorAll(".day-btn").forEach(b => b.classList.remove("active"));
+      if (btnEl) btnEl.classList.add("active");
+      renderAll(filter);
+    }
+
+    function focusItem(id) {
+      const item = ITEMS.find(x => x.id === id);
+      if (!item) return;
+
+      // 如在 SVG 模式撳卡片，自動切返去 OSM 地圖並對焦
+      switchMapMode("osm");
+
+      setTimeout(() => {
+        map.invalidateSize();
+        map.setView([item.lat, item.lng], 13, { animate: true });
+        if (markerDict[id]) {
+          markerDict[id].openPopup();
+        }
+      }, 60);
+    }
+
+    function selectById(id) {
+      focusItem(id);
+      const cardEl = document.getElementById(`card-${id}`);
+      if (cardEl) {
+        cardEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+    }
+
+    function fitAllMarkers() {
+      const markers = Object.values(markerDict);
+      if (markers.length > 0 && map) {
+        const group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.15));
+      }
+    }
+
+    function switchMapMode(mode) {
+      const svgEl = document.getElementById("svg-map");
+      const btnOsm = document.getElementById("btnOsm");
+      const btnSvg = document.getElementById("btnSvg");
+
+      if (mode === "svg") {
+        svgEl.classList.add("visible");
+        btnSvg.classList.add("active");
+        btnOsm.classList.remove("active");
+      } else {
+        svgEl.classList.remove("visible");
+        btnOsm.classList.add("active");
+        btnSvg.classList.remove("active");
+        setTimeout(() => {
+          if (map) map.invalidateSize();
+        }, 80);
+      }
+    }
+
+    function copyTel(tel) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(tel);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = tel;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      const toast = document.getElementById("toast");
+      toast.textContent = `✅ 已複製車機電話：${tel}`;
+      toast.style.display = "block";
+      setTimeout(() => { toast.style.display = "none"; }, 2200);
+    }
+
+    window.addEventListener("DOMContentLoaded", initMap);
+    window.addEventListener("resize", () => { if (map) map.invalidateSize(); });
+  </script>
+</body>
+</html>
